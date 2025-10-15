@@ -14,7 +14,7 @@ After checking, the script waits for a time interval, which may jitter randomly.
 - `LOG_LEVEL` (optional) - log level, one of standard DEBUG, INFO, etc.., default: `INFO`
 - `TELEGRAM_TOKEN` (optional) - telegram bot's token, create new bot with [@BotFather](https://t.me/BotFather), send initial message in advance
 - `TELEGRAM_CHAT_ID` (optional) - your chat id, obtain it with [@get_id_bot](https://t.me/get_id_bot)
-- `PROXY_SERVER` (optional) - path to http proxy, e.g. http://login:pass@address:port
+- `HEADLESS` (optional) - enable headless mode for Chrome, set to `true` or `false`, default: `false`
 - `SLEEP_INTERVAL` (optional) - Sleep interval, default: `15m`
 - `SLEEP_INTERVAL_JITTER` (optional) - Sleep interval jitter, default: `3m`
 
