@@ -1,42 +1,42 @@
-# https://github.com/atlassian/docker-chromium-xvfb/blob/master/images/base/xvfb-chromium
+# Simplified Docker image for inpol-checker with Chromium, Xvfb and VNC
 FROM debian:stable
+
 ENV DEBIAN_FRONTEND=noninteractive
 ARG VNC_PASSWORD="password"
 
-RUN \
-  apt update \
-  && apt install -y \
-    awesome \
+# Install system dependencies
+RUN apt update && apt install -y \
     chromium \
     chromium-driver \
-    curl \
-    htop \
-    iproute2 \
-    nano \
-    procps \
+    fluxbox \
     python3 \
     python3-pip \
-    wget \
     x11vnc \
     xvfb \
+  && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /root/.vnc \
-  && x11vnc -storepasswd $VNC_PASSWORD /root/.vnc/passwd
+  && x11vnc -storepasswd $VNC_PASSWORD /root/.vnc/passwd \
+  && rm -f /usr/lib/python*/EXTERNALLY-MANAGED
 
+# Set working directory
 WORKDIR /opt/src
+
+# Copy application files
+COPY requirements.txt /opt/src/
+COPY docker-entrypoint /usr/bin/docker-entrypoint
+RUN chmod +x /usr/bin/docker-entrypoint
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir --upgrade pip \
+  && pip3 install --no-cache-dir -r requirements.txt
+
+# Copy rest of the application
 COPY . /opt/src/
 
-# Allow pip to install packages in Python 3.12+ externally-managed environment
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-
-RUN python3 -m pip install --upgrade pip \
-  && python3 -m pip install --no-cache-dir -r requirements.txt
-
+# Set environment variables for Chrome and Selenium
 ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 ENV CHROME_BINARY=/usr/bin/chromium
 ENV HEADLESS=true
-
-COPY docker-entrypoint /usr/bin/docker-entrypoint
-RUN chmod +x /usr/bin/docker-entrypoint
 
 ENTRYPOINT ["/usr/bin/docker-entrypoint"]
 CMD ["python3", "run_staged_multi_loop_wh.py"]
