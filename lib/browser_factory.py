@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -28,7 +29,17 @@ class BrowserFactory:
         options.add_argument(f'--window-size={window_size}')
         if maximized:
             options.add_argument('--start-maximized')
-        options.add_argument('--user-data-dir=' + os.environ.get('PROFILE_PATH', './.browser-profile'))
+        
+        # Generate unique user-data-dir to avoid "directory is already in use" error
+        profile_path = os.environ.get('PROFILE_PATH')
+        if profile_path:
+            # If PROFILE_PATH is set, use it with PID to make it unique
+            user_data_dir = f'{profile_path}-{os.getpid()}'
+        else:
+            # Otherwise create temporary directory
+            user_data_dir = tempfile.mkdtemp(prefix='chrome-profile-')
+        
+        options.add_argument(f'--user-data-dir={user_data_dir}')
         options.add_experimental_option('excludeSwitches', ['enable-automation'])
 
         # Headless mode support
