@@ -34,7 +34,7 @@ docker compose logs -f
 ### Optional
 - `TELEGRAM_TOKEN` - Telegram bot token (for notifications)
 - `TELEGRAM_CHAT_ID` - Your Telegram chat ID
-- `HEADLESS` - Run in headless mode (default: `true`)
+- `HEADLESS` - Run in headless mode (default: `false` - GUI visible in VNC)
 - `MONTHS_TO_CHECK` - Number of months to check (default: `5`)
 - `LOG_LEVEL` - Logging level (default: `INFO`)
 - `SLEEP_INTERVAL` - Check interval (default: `15m`)

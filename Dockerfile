@@ -35,7 +35,6 @@ COPY . /opt/src/
 # Set environment variables for Chrome and Selenium
 ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 ENV CHROME_BINARY=/usr/bin/chromium
-ENV HEADLESS=true
 
 ENTRYPOINT ["/usr/bin/docker-entrypoint"]
 CMD ["python", "run_staged_multi_loop_wh.py"]

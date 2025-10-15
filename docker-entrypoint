@@ -61,7 +61,7 @@ x11vnc=$!
 # Set environment variables for Chrome
 export CHROMEDRIVER_PATH=${CHROMEDRIVER_PATH:-/usr/bin/chromedriver}
 export CHROME_BINARY=${CHROME_BINARY:-/usr/bin/chromium}
-export HEADLESS=${HEADLESS:-true}
+export HEADLESS=${HEADLESS:-false}
 
 echo "Environment configured:"
 echo "  DISPLAY=$DISPLAY"
