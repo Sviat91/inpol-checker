@@ -26,9 +26,8 @@ COPY requirements.txt /opt/src/
 COPY docker-entrypoint /usr/bin/docker-entrypoint
 RUN chmod +x /usr/bin/docker-entrypoint
 
-# Install Python dependencies
-RUN pip3 install --no-cache-dir --upgrade pip \
-  && pip3 install --no-cache-dir -r requirements.txt
+# Install Python dependencies (pip 25.1.1 from apt is already up to date)
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy rest of the application
 COPY . /opt/src/
