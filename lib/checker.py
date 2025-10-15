@@ -7,11 +7,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from lib.checker_config import CheckerConfig
+from lib.human_behavior import HumanBehavior
 
 
 class Checker:
     def __init__(self, config: CheckerConfig):
         self.config = config
+        self.human = HumanBehavior(config.browser)
 
     @property
     def waiter(self):
@@ -25,27 +27,42 @@ class Checker:
 
     def login(self):
         self.config.browser.get(self.login_page_url())
-        time.sleep(1)
+        
+        # Simulate page load time (human reading)
+        self.human.simulate_reading(1.5, 3.0)
 
         sign_in = self.waiter.until(
             EC.visibility_of_element_located((By.XPATH, '//button[contains(@class, "btn--submit")]')))
 
+        # Handle cookie banner with human-like behavior
         x_cookie = '//a[contains(@aria-label,"cookie") and contains(@aria-label,"dismiss")]'
-        cookie_block = self.config.browser.find_element(by=By.XPATH, value=x_cookie)
-        if cookie_block.is_displayed():
-            cookie_block.click()
+        try:
+            cookie_block = self.config.browser.find_element(by=By.XPATH, value=x_cookie)
+            if cookie_block.is_displayed():
+                self.human.human_click(cookie_block)
+        except:
+            pass
 
+        # Type email slowly like a human
         email_el = self.config.browser.find_element(by=By.XPATH, value='//input[@formcontrolname="email"]')
-        email_el.click()
-        email_el.send_keys(self.config.email)
+        self.human.slow_type(email_el, self.config.email)
+        
+        # Random delay before password (thinking time)
+        self.human.random_delay(0.5, 1.2)
 
+        # Type password slowly
         password_el = self.config.browser.find_element(by=By.XPATH, value='//input[@formcontrolname="password"]')
-        password_el.click()
-        password_el.send_keys(self.config.password)
+        self.human.slow_type(password_el, self.config.password)
 
+        # Random delay before clicking sign in
+        self.human.random_delay(0.8, 1.5)
+        
         logging.info('sign in')
-        sign_in.click()
-        time.sleep(3)
+        self.human.human_click(sign_in)
+        
+        # Wait for response with random mouse movement
+        self.human.random_mouse_movement()
+        time.sleep(2)
 
         x_error = '//mat-error[contains(text(),"Incorrect email")]'
         if len(self.config.browser.find_elements(by=By.XPATH, value=x_error)) != 0:

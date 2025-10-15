@@ -41,11 +41,19 @@ class BrowserFactory:
         
         options.add_argument(f'--user-data-dir={user_data_dir}')
         
-        # Anti-detection: Remove WebDriver traces to avoid "Access Denied"
+        # Anti-detection: Remove WebDriver traces to avoid Akamai bot detection
         options.add_argument('--disable-blink-features=AutomationControlled')
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
         options.add_experimental_option('excludeSwitches', ['enable-automation'])
         options.add_experimental_option('useAutomationExtension', False)
+        
+        # Additional anti-fingerprinting for Akamai
+        options.add_argument('--disable-web-security')
+        options.add_argument('--lang=pl-PL,pl,en-US,en')
+        options.add_experimental_option('prefs', {
+            'intl.accept_languages': 'pl-PL,pl,en-US,en',
+            'profile.default_content_setting_values.notifications': 2,
+        })
 
         # Headless mode support
         headless_mode = os.environ.get('HEADLESS', 'false').lower() == 'true'
@@ -67,13 +75,79 @@ class BrowserFactory:
         else:
             driver = webdriver.Chrome(options=options)
         
-        # Execute CDP command to hide WebDriver property
+        # Execute CDP commands to hide automation and bypass Akamai fingerprinting
         driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
             'source': '''
+                // Hide webdriver property
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
+                
+                // Spoof plugins to look like real browser
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+                
+                // Spoof languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['pl-PL', 'pl', 'en-US', 'en']
+                });
+                
+                // Override chrome property
+                window.chrome = {
+                    runtime: {}
+                };
+                
+                // Override permissions query
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+                
+                // Canvas fingerprinting protection
+                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function(type) {
+                    if (type === 'image/png' && this.width === 16 && this.height === 16) {
+                        return originalToDataURL.apply(this, arguments);
+                    }
+                    const context = this.getContext('2d');
+                    const imageData = context.getImageData(0, 0, this.width, this.height);
+                    for (let i = 0; i < imageData.data.length; i += 4) {
+                        imageData.data[i] = imageData.data[i] ^ 1;
+                    }
+                    context.putImageData(imageData, 0, 0);
+                    return originalToDataURL.apply(this, arguments);
+                };
+                
+                // WebGL fingerprinting protection
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter.apply(this, arguments);
+                };
+                
+                // Timezone spoofing for Warsaw
+                Date.prototype.getTimezoneOffset = function() {
+                    return -60; // UTC+1 (Warsaw winter time)
+                };
             '''
+        })
+        
+        # Set timezone to Europe/Warsaw via CDP
+        driver.execute_cdp_cmd('Emulation.setTimezoneOverride', {
+            'timezoneId': 'Europe/Warsaw'
+        })
+        
+        # Set locale
+        driver.execute_cdp_cmd('Emulation.setLocaleOverride', {
+            'locale': 'pl-PL'
         })
         
         return driver
