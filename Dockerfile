@@ -24,7 +24,11 @@ RUN \
 
 WORKDIR /opt/src
 COPY . /opt/src/
-RUN pip install -r requirements.txt
+RUN python3 -m pip install --upgrade pip \
+  && python3 -m pip install --no-cache-dir -r requirements.txt
+
+ENV CHROMEDRIVER_PATH=/usr/lib/chromium/chromedriver
+ENV CHROME_BINARY=/usr/bin/chromium
 
 ADD runner /usr/bin/runner
 ENTRYPOINT ["/usr/bin/docker-entrypoint"]

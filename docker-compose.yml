@@ -11,6 +11,8 @@ services:
     volumes:
       - "inpol-checker-browser-profile:/tmp/browser-profile"
     environment:
+      - "CHROMEDRIVER_PATH=/usr/lib/chromium/chromedriver"
+      - "CHROME_BINARY=/usr/bin/chromium"
       - "PROFILE_PATH=/tmp/browser-profile"
 volumes:
   inpol-checker-browser-profile:
