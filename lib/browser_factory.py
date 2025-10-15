@@ -40,7 +40,12 @@ class BrowserFactory:
             user_data_dir = tempfile.mkdtemp(prefix='chrome-profile-')
         
         options.add_argument(f'--user-data-dir={user_data_dir}')
+        
+        # Anti-detection: Remove WebDriver traces to avoid "Access Denied"
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
         options.add_experimental_option('excludeSwitches', ['enable-automation'])
+        options.add_experimental_option('useAutomationExtension', False)
 
         # Headless mode support
         headless_mode = os.environ.get('HEADLESS', 'false').lower() == 'true'
@@ -58,6 +63,17 @@ class BrowserFactory:
 
         # Create Chrome WebDriver with standard selenium
         if service:
-            return webdriver.Chrome(service=service, options=options)
+            driver = webdriver.Chrome(service=service, options=options)
         else:
-            return webdriver.Chrome(options=options)
+            driver = webdriver.Chrome(options=options)
+        
+        # Execute CDP command to hide WebDriver property
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            'source': '''
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            '''
+        })
+        
+        return driver
