@@ -11,6 +11,9 @@ RUN apt update && apt install -y \
     fluxbox \
     python3 \
     python3-pip \
+    python3-dev \
+    build-essential \
+    libffi-dev \
     x11vnc \
     xvfb \
   && rm -rf /var/lib/apt/lists/* \
