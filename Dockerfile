@@ -24,6 +24,10 @@ RUN \
 
 WORKDIR /opt/src
 COPY . /opt/src/
+
+# Allow pip to install packages in Python 3.12+ externally-managed environment
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
 RUN python3 -m pip install --upgrade pip \
   && python3 -m pip install --no-cache-dir -r requirements.txt
 
