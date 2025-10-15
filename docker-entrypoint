@@ -1,48 +1,68 @@
 #!/bin/bash
 
+# Docker entrypoint for inpol-checker with Xvfb and VNC support
+# Sets up virtual display and starts the Python checker
+
+set -e
+
+# Process cleanup handler
 _kill_procs() {
-  kill -TERM "$script"
-  wait $script
-#  kill -TERM "$awesome"
-  kill -TERM "$x11vnc"
-#  wait "$awesome"
-  wait "$x11vnc"
-  kill -TERM "$xvfb"
+  echo "Shutting down processes..."
+  kill -TERM "$script" 2>/dev/null || true
+  wait "$script" 2>/dev/null || true
+  kill -TERM "$x11vnc" 2>/dev/null || true
+  wait "$x11vnc" 2>/dev/null || true
+  kill -TERM "$xvfb" 2>/dev/null || true
+  wait "$xvfb" 2>/dev/null || true
 }
 
-trap _kill_procs SIGTERM
+trap _kill_procs SIGTERM SIGINT
 
-rm /tmp/.X99-lock || true
+# Clean up stale X lock file
+rm -f /tmp/.X99-lock
+
+# Start Xvfb (X Virtual Frame Buffer)
+echo "Starting Xvfb..."
 XVFB_WHD=${XVFB_WHD:-1920x1080x16}
 Xvfb :99 -ac -screen 0 "$XVFB_WHD" -nolisten tcp +extension DAMAGE &
 xvfb=$!
 
+# Set display environment variable
 export DISPLAY=:99
 
-FD_GEOM=${FD_GEOM:-1920x1080x16}
+# Wait for Xvfb to be ready
+sleep 2
+
+# Start x11vnc for VNC access (port 5900)
+echo "Starting x11vnc on port 5900..."
 x11vnc \
   -rfbport 5900 \
   -rfbauth /root/.vnc/passwd \
   -display :99 \
-  -auth /root/xvfb.auth \
-  -ncache 10 \
-  -noxfixes \
   -forever \
-  -loop \
+  -shared \
   -nopw \
-  2> /root/.vnc/log.log \
-  &
-x11vnc=$!
+  -bg \
+  -o /root/.vnc/log.log
 
-#awesome &
-#awesome=$!
+# Set environment variables for Chrome
+export CHROMEDRIVER_PATH=${CHROMEDRIVER_PATH:-/usr/bin/chromedriver}
+export CHROME_BINARY=${CHROME_BINARY:-/usr/bin/chromium}
+export HEADLESS=${HEADLESS:-true}
 
-cd /opt/src || exit
-# shellcheck disable=SC2068
-exec $@
+echo "Environment configured:"
+echo "  DISPLAY=$DISPLAY"
+echo "  CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH"
+echo "  CHROME_BINARY=$CHROME_BINARY"
+echo "  HEADLESS=$HEADLESS"
+
+# Change to working directory
+cd /opt/src || exit 1
+
+# Execute the main command
+echo "Starting application: $*"
+exec "$@" &
 script=$!
 
+# Wait for main process
 wait $script
-#wait $awesome
-wait $x11vnc
-wait $xvfb

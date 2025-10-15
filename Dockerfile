@@ -27,9 +27,12 @@ COPY . /opt/src/
 RUN python3 -m pip install --upgrade pip \
   && python3 -m pip install --no-cache-dir -r requirements.txt
 
-ENV CHROMEDRIVER_PATH=/usr/lib/chromium/chromedriver
+ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 ENV CHROME_BINARY=/usr/bin/chromium
+ENV HEADLESS=true
 
-ADD runner /usr/bin/runner
+COPY docker-entrypoint /usr/bin/docker-entrypoint
+RUN chmod +x /usr/bin/docker-entrypoint
+
 ENTRYPOINT ["/usr/bin/docker-entrypoint"]
 CMD ["python3", "run_staged_multi_loop_wh.py"]
