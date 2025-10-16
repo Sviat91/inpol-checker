@@ -27,6 +27,12 @@ button[<h3 _ngcontent-rnh-c237="">Cases.MakeAppointmentAtOffice</h3>]
 CALENDAR_DATES =[<div class="mat-calendar-body-cell-content mat-focus-indicator"> 17 </div>]  # все даты для клика
 ACTIVE_DATE =[<div class="mat-calendar-body-cell-content mat-focus-indicator mat-calendar-body-selected"> 17 </div>]  # текущая выбранная (для логов)
 
+Кнопка переключения следующего месяца:
+[<button mat-icon-button="" type="button" class="mat-focus-indicator mat-calendar-next-button mat-icon-button mat-button-base" aria-label="Next month"><span class="mat-button-wrapper"></span><span matripple="" class="mat-ripple mat-button-ripple mat-button-ripple-round"></span><span class="mat-button-focus-overlay"></span></button>]
+
+Кнопка переключения предыдущего месяца:
+[<button mat-icon-button="" type="button" class="mat-focus-indicator mat-calendar-previous-button mat-icon-button mat-button-base" aria-label="Previous month"><span class="mat-button-wrapper"></span><span matripple="" class="mat-ripple mat-button-ripple mat-button-ripple-round"></span><span class="mat-button-focus-overlay"></span></button>]
+
 // 7. Слоты времени (когда появятся)
 [будет потом]
 SLOTS_CONTAINER =[<div _ngcontent-rnh-c182="" class="col-lg-6"><div _ngcontent-rnh-c182="" class="reservation__hours"><!----><div _ngcontent-rnh-c182="" class="tiles tiles--hours"><div _ngcontent-rnh-c182="" class="row"><!----></div></div></div></div>]

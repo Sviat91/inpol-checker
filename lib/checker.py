@@ -1,4 +1,5 @@
 import logging
+import random as rand
 import time
 from random import random
 
@@ -14,6 +15,21 @@ class Checker:
     def __init__(self, config: CheckerConfig):
         self.config = config
         self.human = HumanBehavior(config.browser)
+    
+    def detect_captcha(self):
+        """Detect Akamai captcha and wait for manual solving."""
+        try:
+            # Check for Akamai iframe
+            captcha_iframes = self.config.browser.find_elements(By.CSS_SELECTOR, "iframe[src*='akamai']")
+            if captcha_iframes:
+                msg = '⚠️ AKAMAI CAPTCHA DETECTED! Please solve manually in VNC within 2 minutes'
+                logging.warning(msg)
+                self.config.messenger.send_message(msg)
+                time.sleep(120)  # Wait 2 minutes for manual solving
+                return True
+        except Exception as e:
+            logging.debug(f'Captcha detection error: {e}')
+        return False
 
     @property
     def waiter(self):
@@ -80,11 +96,16 @@ class Checker:
         x_progress_bar = '//mat-spinner[@role="progressbar"]'
         self.waiter.until_not(EC.visibility_of_element_located((By.XPATH, x_progress_bar)))
 
-    x_appointment_button = '//div/h3[contains(text(),"Make an appointment at the office")]/following-sibling::button'
+    # Updated selector from selectors.md
+    x_appointment_button = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]'
 
     def open_case_page(self):
         self.config.browser.get(self.case_page_url(self.config.case_id))
-        time.sleep(3)
+        time.sleep(rand.uniform(2, 5))  # Increased delay 2-5 seconds
+        
+        # Check for captcha
+        self.detect_captcha()
+        
         if len(self.config.browser.find_elements(by=By.XPATH, value=self.x_appointment_button)) == 0:
             logging.error('Appointment button not found')
             return False
@@ -93,20 +114,27 @@ class Checker:
 
     def expand_appointment_panel(self):
         logging.info('expand appointment panel')
-        x_appointment_block = '//div/h3[contains(text(),"Make an appointment at the office")]/following-sibling::div[contains(@class,"accordion__more")]'
-        appointment_block = self.config.browser.find_element(by=By.XPATH, value=x_appointment_block)
-        if not appointment_block.is_displayed():
-            self.random_sleep()
-            x_appointment_button_el = self.config.browser.find_element(by=By.XPATH, value=self.x_appointment_button)
-            _, _ = x_appointment_button_el.location_once_scrolled_into_view
-            x_appointment_button_el.click()
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
+        x_appointment_block = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]/following-sibling::div[contains(@class,"accordion__more")]'
+        try:
+            appointment_block = self.config.browser.find_element(by=By.XPATH, value=x_appointment_block)
+            if not appointment_block.is_displayed():
+                time.sleep(rand.uniform(1, 3))
+                x_appointment_button_el = self.config.browser.find_element(by=By.XPATH, value=self.x_appointment_button)
+                _, _ = x_appointment_button_el.location_once_scrolled_into_view
+                self.human.human_click(x_appointment_button_el)
+        except Exception as e:
+            logging.warning(f'Error expanding appointment panel: {e}')
 
     def expand_locations(self):
         logging.info('expand list of locations')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_show_location_button = '//mat-select[@name="location"]'
         self.waiter.until(EC.visibility_of_element_located((By.XPATH, x_show_location_button)))
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_show_location_button).click()
+        location_dropdown = self.config.browser.find_element(by=By.XPATH, value=x_show_location_button)
+        self.human.human_click(location_dropdown)
 
     def get_locations(self):
         logging.info('get a list of locations')
@@ -119,17 +147,21 @@ class Checker:
 
     def select_location(self, location_name):
         logging.info(f'location selection ({location_name})')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_location_selector = lambda text: f'//mat-option/span[@class="mat-option-text" and contains(text(),"{text}")]'
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_location_selector(location_name)).click()
+        location_option = self.config.browser.find_element(by=By.XPATH, value=x_location_selector(location_name))
+        self.human.human_click(location_option)
         self.wait_spinner()
 
     def expand_queues(self):
         logging.info('open list of queues')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_show_queue_button = '//mat-select[@name="queueName"]'
         self.waiter.until(EC.visibility_of_element_located((By.XPATH, x_show_queue_button)))
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_show_queue_button).click()
+        queue_dropdown = self.config.browser.find_element(by=By.XPATH, value=x_show_queue_button)
+        self.human.human_click(queue_dropdown)
         self.wait_spinner()
 
     def get_queues(self):
@@ -143,9 +175,11 @@ class Checker:
 
     def select_queue(self, queue_name):
         logging.info(f'queue selection ({queue_name})')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_queue_selector = lambda text: f'//mat-option/span[@class="mat-option-text" and contains(text(),"{text}")]'
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_queue_selector(queue_name)).click()
+        queue_option = self.config.browser.find_element(by=By.XPATH, value=x_queue_selector(queue_name))
+        self.human.human_click(queue_option)
         self.wait_spinner()
 
     def day_checker_full(self, location, queue, months_to_check=3):
@@ -164,8 +198,8 @@ class Checker:
             for enabled_cell in enabled_cells:
                 date_text = enabled_cell.text
                 logging.info(f'check {date_text} {month_year_text}')
-                self.random_sleep()
-                enabled_cell.click()
+                time.sleep(rand.uniform(2, 5))  # Increased delay
+                self.human.human_click(enabled_cell)
                 day_counter += 1
                 self.wait_spinner()
 
@@ -180,33 +214,40 @@ class Checker:
                 return
 
             logging.info('go to next month')
-            self.random_sleep()
-            self.config.browser.find_element(by=By.XPATH, value=x_next_month).click()
+            time.sleep(rand.uniform(2, 5))  # Increased delay
+            next_month_btn = self.config.browser.find_element(by=By.XPATH, value=x_next_month)
+            self.human.human_click(next_month_btn)
             self.wait_spinner()
 
     def check_one_location(self, location_number):
         self.config.browser.get(self.case_page_url(self.config.case_id))
-        time.sleep(3)
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
+        # Check for captcha
+        self.detect_captcha()
 
         logging.info('expand appointment panel')
-        x_appointment_button = '//div/h3[contains(text(),"Make an appointment at the office")]/following-sibling::button'
+        x_appointment_button = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]'
         WebDriverWait(self.config.browser, self.config.page_load_timeout).until(
             EC.visibility_of_element_located((By.XPATH, x_appointment_button)))
-        x_appointment_block = '//div/h3[contains(text(),"Make an appointment at the office")]/following-sibling::div[contains(@class,"accordion__more")]'
+        x_appointment_block = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]/following-sibling::div[contains(@class,"accordion__more")]'
         appointment_block = self.config.browser.find_element(by=By.XPATH, value=x_appointment_block)
         if not appointment_block.is_displayed():
-            self.random_sleep()
-            self.config.browser.find_element(by=By.XPATH, value=x_appointment_button).click()
+            time.sleep(rand.uniform(1, 3))
+            button_el = self.config.browser.find_element(by=By.XPATH, value=x_appointment_button)
+            self.human.human_click(button_el)
         _, _ = self.config.browser.find_element(
             by=By.XPATH,
             value=x_appointment_button).location_once_scrolled_into_view
 
         logging.info('expand list of locations')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_show_location_button = '//mat-select[@name="location"]'
         WebDriverWait(self.config.browser, self.config.page_load_timeout).until(
             EC.visibility_of_element_located((By.XPATH, x_show_location_button)))
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_show_location_button).click()
+        location_dropdown = self.config.browser.find_element(by=By.XPATH, value=x_show_location_button)
+        self.human.human_click(location_dropdown)
 
         logging.info('get a list of locations')
         x_location_elements = '//mat-option/span[@class="mat-option-text"]'
@@ -225,19 +266,23 @@ class Checker:
         location_name = location[location_number]
 
         logging.info(f'location selection ({location_name})')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_location_selector = lambda text: f'//mat-option/span[@class="mat-option-text" and contains(text(),"{text}")]'
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_location_selector(location_name)).click()
+        location_option = self.config.browser.find_element(by=By.XPATH, value=x_location_selector(location_name))
+        self.human.human_click(location_option)
         self.wait_spinner()
 
         # TODO: Find better way to wait list of queues
 
         logging.info('open list of queues')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_show_queue_button = '//mat-select[@name="queueName"]'
         WebDriverWait(self.config.browser, self.config.page_load_timeout).until(
             EC.visibility_of_element_located((By.XPATH, x_show_queue_button)))
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_show_queue_button).click()
+        queue_dropdown = self.config.browser.find_element(by=By.XPATH, value=x_show_queue_button)
+        self.human.human_click(queue_dropdown)
         self.wait_spinner()
 
         logging.info('get list of queues')
@@ -258,9 +303,11 @@ class Checker:
         queue_name = queues[queue_number]
 
         logging.info(f'queue selection ({queue_name})')
+        time.sleep(rand.uniform(2, 5))  # Increased delay
+        
         x_queue_selector = lambda text: f'//mat-option/span[@class="mat-option-text" and contains(text(),"{text}")]'
-        self.random_sleep()
-        self.config.browser.find_element(by=By.XPATH, value=x_queue_selector(queue_name)).click()
+        queue_option = self.config.browser.find_element(by=By.XPATH, value=x_queue_selector(queue_name))
+        self.human.human_click(queue_option)
         self.wait_spinner()
 
         x_calendar = '//mat-calendar[contains(@class,"reservation-calander")]'
@@ -279,8 +326,8 @@ class Checker:
             for enabled_cell in enabled_cells:
                 date_text = enabled_cell.text
                 logging.info(f'check {date_text} {month_year_text}')
-                self.random_sleep()
-                enabled_cell.click()
+                time.sleep(rand.uniform(2, 5))  # Increased delay
+                self.human.human_click(enabled_cell)
                 day_counter += 1
                 self.wait_spinner()
                 # TODO: Found better marker
@@ -293,9 +340,10 @@ class Checker:
                 break
 
             logging.info('go to next month')
-            self.random_sleep()
+            time.sleep(rand.uniform(2, 5))  # Increased delay
             month_counter += 1
-            self.config.browser.find_element(by=By.XPATH, value=x_next_month).click()
+            next_month_button = self.config.browser.find_element(by=By.XPATH, value=x_next_month)
+            self.human.human_click(next_month_button)
             self.wait_spinner()
 
         logging.info('end')
