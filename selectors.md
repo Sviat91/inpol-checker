@@ -1,5 +1,5 @@
 // 1. Кнопка "Umów wizytę w urzędzie"
-button[<h3 _ngcontent-rnh-c237="">Cases.MakeAppointmentAtOffice</h3>]
+button[<button _ngcontent-rss-c237="" class="btn btn--accordion"><span _ngcontent-rss-c237=""><mat-icon _ngcontent-rss-c237="" role="img" fontset="material-icons" class="mat-icon notranslate material-icons mat-icon-no-color" aria-hidden="true" data-mat-icon-type="font" data-mat-icon-namespace="material-icons">keyboard_arrow_up</mat-icon></span></button>]
 
 
 

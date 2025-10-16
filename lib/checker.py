@@ -96,8 +96,9 @@ class Checker:
         x_progress_bar = '//mat-spinner[@role="progressbar"]'
         self.waiter.until_not(EC.visibility_of_element_located((By.XPATH, x_progress_bar)))
 
-    # Updated selector from selectors.md
-    x_appointment_button = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]'
+    # Language-independent selector - find accordion with "appointment" class or structure
+    # Look for the accordion section that contains location/queue dropdowns
+    x_appointment_section = '//div[contains(@class,"accordion")]//mat-select[@name="location"]'
 
     def open_case_page(self):
         self.config.browser.get(self.case_page_url(self.config.case_id))
@@ -106,26 +107,93 @@ class Checker:
         # Check for captcha
         self.detect_captcha()
         
-        if len(self.config.browser.find_elements(by=By.XPATH, value=self.x_appointment_button)) == 0:
-            logging.error('Appointment button not found')
+        # Look for location dropdown (it's inside the appointment section)
+        # This is language-independent
+        try:
+            self.waiter.until(EC.presence_of_element_located((By.XPATH, self.x_appointment_section)))
+            logging.info('Appointment section found (detected location dropdown)')
+            return True
+        except Exception as e:
+            logging.error(f'Appointment section not found: {e}')
+            # Debug: print page structure
+            all_buttons = self.config.browser.find_elements(by=By.XPATH, value='//button')
+            logging.error(f'Found {len(all_buttons)} buttons on page')
             return False
-        self.waiter.until(EC.visibility_of_element_located((By.XPATH, self.x_appointment_button)))
-        return True
 
     def expand_appointment_panel(self):
-        logging.info('expand appointment panel')
-        time.sleep(rand.uniform(2, 5))  # Increased delay
+        logging.info('check if appointment panel needs expanding')
+        time.sleep(rand.uniform(1, 2))
         
-        x_appointment_block = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]/following-sibling::div[contains(@class,"accordion__more")]'
+        # Language-independent: find location dropdown and check if visible
+        x_location_dropdown = '//mat-select[@name="location"]'
+        
         try:
-            appointment_block = self.config.browser.find_element(by=By.XPATH, value=x_appointment_block)
-            if not appointment_block.is_displayed():
-                time.sleep(rand.uniform(1, 3))
-                x_appointment_button_el = self.config.browser.find_element(by=By.XPATH, value=self.x_appointment_button)
-                _, _ = x_appointment_button_el.location_once_scrolled_into_view
-                self.human.human_click(x_appointment_button_el)
+            # Check if location dropdown is already visible first
+            dropdown_elements = self.config.browser.find_elements(by=By.XPATH, value=x_location_dropdown)
+            
+            if len(dropdown_elements) > 0 and dropdown_elements[0].is_displayed():
+                logging.info('Panel already expanded (location dropdown visible)')
+                return
+            
+            # Panel is collapsed - find the SECOND accordion button (first is "Add attachments")
+            # We need the "Make an appointment at the office" button which is the second one
+            x_all_accordion_buttons = '//button[contains(@class,"btn--accordion")]'
+            all_buttons = self.config.browser.find_elements(by=By.XPATH, value=x_all_accordion_buttons)
+            
+            logging.debug(f'Found {len(all_buttons)} accordion buttons total')
+            
+            # Filter for visible and interactable buttons
+            button_elements = []
+            for idx, btn in enumerate(all_buttons):
+                try:
+                    if btn.is_displayed() and btn.size['width'] > 0 and btn.size['height'] > 0:
+                        button_elements.append(btn)
+                        logging.debug(f'Button {idx}: visible, size={btn.size}')
+                    else:
+                        logging.debug(f'Button {idx}: not visible or zero size')
+                except Exception as e:
+                    logging.debug(f'Button {idx}: error checking - {e}')
+            
+            # Take the LAST visible button (appointment section is usually last)
+            if len(button_elements) > 1:
+                button_elements = [button_elements[-1]]
+                logging.debug('Using last visible accordion button (appointment section)')
+            elif len(button_elements) == 0:
+                # Fallback: try taking second button if exists
+                if len(all_buttons) >= 2:
+                    button_elements = [all_buttons[1]]
+                    logging.debug('Fallback: using second accordion button')
+                else:
+                    button_elements = all_buttons
+            
+            if len(button_elements) == 0:
+                logging.warning('Accordion button not found on page')
+                # Debug: check how many buttons exist
+                all_buttons = self.config.browser.find_elements(by=By.XPATH, value='//button')
+                logging.debug(f'Total buttons on page: {len(all_buttons)}')
+                # Check if dropdown is visible anyway
+                dropdown_elements = self.config.browser.find_elements(by=By.XPATH, value=x_location_dropdown)
+                if len(dropdown_elements) > 0 and dropdown_elements[0].is_displayed():
+                    logging.info('Panel already expanded (no button needed)')
+                return
+            
+            # Panel is collapsed, click the accordion button to expand
+            logging.info('Panel collapsed, clicking accordion button to expand')
+            time.sleep(rand.uniform(0.5, 1.0))
+            button_el = button_elements[0]
+            
+            # Scroll into view
+            _, _ = button_el.location_once_scrolled_into_view
+            time.sleep(0.3)
+            
+            # Use JavaScript click as it's more reliable for accordion buttons
+            logging.debug('Clicking accordion button via JavaScript')
+            self.config.browser.execute_script("arguments[0].click();", button_el)
+            time.sleep(rand.uniform(1.5, 2.5))  # Wait for animation
+            logging.info('Panel expanded successfully')
         except Exception as e:
-            logging.warning(f'Error expanding appointment panel: {e}')
+            logging.debug(f'Error expanding panel (likely already expanded): {e}')
+            # Panel is probably already expanded, continue anyway
 
     def expand_locations(self):
         logging.info('expand list of locations')
@@ -226,19 +294,30 @@ class Checker:
         # Check for captcha
         self.detect_captcha()
 
-        logging.info('expand appointment panel')
-        x_appointment_button = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]'
-        WebDriverWait(self.config.browser, self.config.page_load_timeout).until(
-            EC.visibility_of_element_located((By.XPATH, x_appointment_button)))
-        x_appointment_block = '//button[.//h3[contains(text(),"Cases.MakeAppointmentAtOffice")]]/following-sibling::div[contains(@class,"accordion__more")]'
-        appointment_block = self.config.browser.find_element(by=By.XPATH, value=x_appointment_block)
-        if not appointment_block.is_displayed():
-            time.sleep(rand.uniform(1, 3))
-            button_el = self.config.browser.find_element(by=By.XPATH, value=x_appointment_button)
-            self.human.human_click(button_el)
-        _, _ = self.config.browser.find_element(
-            by=By.XPATH,
-            value=x_appointment_button).location_once_scrolled_into_view
+        logging.info('check if appointment panel needs expanding')
+        # Language-independent selectors
+        x_location_dropdown = '//mat-select[@name="location"]'
+        x_accordion_button = '//button[following-sibling::div[contains(@class,"accordion__more")]//mat-select[@name="location"]]'
+        
+        # Wait for page to load
+        time.sleep(rand.uniform(1, 2))
+        
+        # Check if accordion is already expanded
+        dropdown_elements = self.config.browser.find_elements(by=By.XPATH, value=x_location_dropdown)
+        if len(dropdown_elements) > 0 and dropdown_elements[0].is_displayed():
+            logging.info('Panel already expanded (location dropdown visible)')
+        else:
+            # Panel collapsed, click to expand
+            button_elements = self.config.browser.find_elements(by=By.XPATH, value=x_accordion_button)
+            if len(button_elements) > 0:
+                logging.info('Panel collapsed, clicking to expand')
+                time.sleep(rand.uniform(1, 3))
+                button_el = button_elements[0]
+                _, _ = button_el.location_once_scrolled_into_view
+                self.human.human_click(button_el)
+                time.sleep(rand.uniform(1, 2))
+            else:
+                logging.warning('Accordion button not found')
 
         logging.info('expand list of locations')
         time.sleep(rand.uniform(2, 5))  # Increased delay

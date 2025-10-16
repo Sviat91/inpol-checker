@@ -1,0 +1,3 @@
+# Prevent Git from converting line endings in shell scripts
+docker-entrypoint text eol=lf
+*.sh text eol=lf
