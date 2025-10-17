@@ -5,6 +5,25 @@ Each pass includes checking all three offices. The script clicks all active date
 If there are signs of the existence of unoccupied slots (I don't know the exact xpath of the slots), it sends a message to the telegram bot.
 After checking, the script waits for a time interval, which may jitter randomly.
 
+## 🎯 Quick Test (Without Working Hours)
+
+For testing without time restrictions:
+
+```shell
+# Set environment variables
+EMAIL=... PASSWORD=... CASE_ID=... python test_checker_simple.py
+
+# With DEBUG logging
+LOG_LEVEL=DEBUG EMAIL=... PASSWORD=... CASE_ID=... python test_checker_simple.py
+```
+
+This will:
+- ✅ Check all locations
+- ✅ Check all queues for each location
+- ✅ Skip combinations where calendar doesn't load
+- ✅ Send notifications when slots are found
+- ✅ Run immediately (no working hours restrictions)
+
 ## 🥑 Parameters
 
 - `EMAIL` (required) - login at inpol

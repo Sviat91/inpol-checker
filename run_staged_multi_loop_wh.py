@@ -1,7 +1,6 @@
 import logging
 import os
 import time
-from random import shuffle
 
 from lib.browser_factory import BrowserFactory
 from lib.checker import Checker
@@ -53,26 +52,32 @@ def check():
             if len(locations) == 0:
                 return
 
-        shuffle(locations)
+        # НЕ перемешиваем - проходим по порядку!
         months_to_check = int(os.environ.get('MONTHS_TO_CHECK', '5'))
+        
         for location in locations:
+            logging.info(f'=== Checking location: {location} ===')
             inpol.select_location(location)
-            inpol.expand_queues()
-            queues = inpol.get_queues()
-
-            if len(queues) != 1:
-                msg = f'wrong list of queues {queues} for location "{location}"'
-                logging.warning(msg)
-                messenger.send_message(msg)
-                if len(queues) == 0:
+            
+            try:
+                # Атомарно: открыть dropdown очередей и выбрать первую
+                queue = inpol.select_first_queue_atomic()
+                
+                if queue is None:
+                    msg = f'⚠️ No queues available for location "{location}" - skipping'
+                    logging.warning(msg)
+                    messenger.send_message(msg)
                     inpol.expand_locations()
                     continue
-            queue = queues[0]
-
-            inpol.select_queue(queue)
-            inpol.day_checker_full(location=location, queue=queue, months_to_check=months_to_check)
-
-            # prepare for next loop
+                
+                # Проверяем даты для этой комбинации адрес+очередь
+                inpol.day_checker_full(location=location, queue=queue, months_to_check=months_to_check)
+                
+            except Exception as e:
+                logging.error(f'Error checking location "{location}": {e}')
+                # Продолжаем к следующему адресу
+            
+            # Готовимся к следующему адресу
             inpol.expand_locations()
 
         logging.debug('end')
