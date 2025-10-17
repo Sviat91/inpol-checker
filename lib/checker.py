@@ -2,6 +2,8 @@ import logging
 import random as rand
 import time
 from random import random
+import calendar as cal
+from datetime import datetime
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -15,12 +17,38 @@ class Checker:
     def __init__(self, config: CheckerConfig):
         self.config = config
         self.human = HumanBehavior(config.browser)
+        self._cached_check_date = None  # Cache for date to check (shared across all locations)
     
     def detect_captcha(self):
         """Detect Akamai captcha and wait for manual solving."""
         try:
             captcha_detected = False
             detection_reason = ""
+            
+            # Method 0: Check for Akamai proceed button (MOST RELIABLE!)
+            # This button appears ONLY when captcha is active
+            try:
+                proceed_buttons = self.config.browser.find_elements(By.CSS_SELECTOR, "#proceed-button")
+                for btn in proceed_buttons:
+                    if btn.is_displayed():
+                        # Double-check it's the captcha button by text
+                        btn_text = ""
+                        try:
+                            btn_text = btn.text.lower()
+                        except:
+                            try:
+                                span = btn.find_element(By.ID, "proceed-message")
+                                btn_text = span.text.lower()
+                            except:
+                                pass
+                        
+                        if 'kontynuuj' in btn_text or 'proceed' in btn_text or 'continue' in btn_text or btn_text == '':
+                            captcha_detected = True
+                            detection_reason = f'Akamai proceed button (text: "{btn_text or "Kontynuuj"}")'
+                            logging.debug(f'Captcha detected: {detection_reason}')
+                            break
+            except Exception as e:
+                logging.debug(f'Error checking proceed button: {e}')
             
             # Method 1: Check for VISIBLE Akamai iframe
             captcha_iframes = self.config.browser.find_elements(By.CSS_SELECTOR, "iframe[src*='akamai']")
@@ -106,6 +134,16 @@ class Checker:
                 logging.info('Waiting 120 seconds for captcha to be solved manually...')
                 time.sleep(120)
                 
+                # After captcha - wait for page to stabilize
+                logging.info('Waiting for page stabilization after captcha...')
+                time.sleep(rand.uniform(3, 5))
+                
+                # Make sure spinner finished
+                try:
+                    self.wait_spinner()
+                except:
+                    logging.debug('No spinner after captcha')
+                
                 logging.info('Resuming after captcha wait period')
                 return True
                 
@@ -185,7 +223,7 @@ class Checker:
 
     def open_case_page(self):
         self.config.browser.get(self.case_page_url(self.config.case_id))
-        time.sleep(rand.uniform(1, 2))  # Faster page load
+        time.sleep(rand.uniform(0.5, 1.0))  # Super fast page load
         
         # Check for captcha
         self.detect_captcha()
@@ -253,7 +291,7 @@ class Checker:
 
     def expand_locations(self):
         logging.info('expand list of locations')
-        time.sleep(rand.uniform(0.5, 1.0))  # Faster dropdown
+        time.sleep(rand.uniform(0.15, 0.35))  # Ultra fast dropdown
         
         x_show_location_button = '//mat-select[@name="location"]'
         self.waiter.until(EC.visibility_of_element_located((By.XPATH, x_show_location_button)))
@@ -291,7 +329,7 @@ class Checker:
 
     def expand_queues(self):
         logging.info('open list of queues')
-        time.sleep(rand.uniform(0.5, 1.0))  # Faster dropdown
+        time.sleep(rand.uniform(0.15, 0.35))  # Ultra fast dropdown
         
         x_show_queue_button = '//mat-select[@name="queueName"]'
         self.waiter.until(EC.visibility_of_element_located((By.XPATH, x_show_queue_button)))
@@ -335,7 +373,7 @@ class Checker:
         Минимизирует время между открытием dropdown и кликом.
         """
         logging.info('open list of queues (atomic operation)')
-        time.sleep(rand.uniform(0.3, 0.8))  # Quick but human-like
+        time.sleep(rand.uniform(0.1, 0.3))  # Lightning fast
         
         x_show_queue_button = '//mat-select[@name="queueName"]'
         x_queue_elements = '//mat-option/span[@class="mat-option-text"]'
@@ -496,6 +534,291 @@ class Checker:
             next_month_btn = self.config.browser.find_element(by=By.XPATH, value=x_next_month)
             self.human.human_click(next_month_btn)
             self.wait_spinner()
+
+    @staticmethod
+    def parse_month_year(month_year_text):
+        """Parse month/year text like 'PAŹ 2025' into (year, month_number)"""
+        months_pl = {
+            'STY': 1, 'LUT': 2, 'MAR': 3, 'KWI': 4, 'MAJ': 5, 'CZE': 6,
+            'LIP': 7, 'SIE': 8, 'WRZ': 9, 'PAŹ': 10, 'LIS': 11, 'GRU': 12
+        }
+        
+        try:
+            parts = month_year_text.split()
+            if len(parts) >= 2:
+                month_str = parts[0]
+                year = int(parts[1])
+                month = months_pl.get(month_str, 1)
+                return year, month
+        except Exception as e:
+            logging.debug(f'Error parsing month/year "{month_year_text}": {e}')
+        
+        return None, None
+    
+    @staticmethod
+    def get_last_working_day_of_month(year, month):
+        """
+        Get the last working day (Mon-Fri) of the month.
+        
+        Examples:
+        - October 2025: last day 31 (Friday) → 31
+        - November 2025: last day 30 (Sunday), 29 (Saturday) → 28 (Friday)
+        - December 2025: last day 31 (Wednesday) → 31
+        """
+        last_day = cal.monthrange(year, month)[1]
+        
+        # Go backwards from last day to first working day
+        for day in range(last_day, 0, -1):
+            weekday = datetime(year, month, day).weekday()
+            if weekday < 5:  # Mon-Fri (0-4)
+                return day
+        
+        return last_day  # Fallback
+    
+    @staticmethod
+    def is_weekend_date(date_num, year, month):
+        """Check if given date is Saturday or Sunday"""
+        try:
+            weekday = datetime(year, month, date_num).weekday()
+            return weekday >= 5  # Sat=5, Sun=6
+        except Exception as e:
+            logging.debug(f'Error checking weekend for {date_num}/{month}/{year}: {e}')
+            return False
+
+    def find_furthest_available_date(self, x_month_year, x_enabled_cells, x_next_month, x_prev_month):
+        """
+        Find the furthest available date by checking if last available date
+        equals last working day of month. If yes, move to next month.
+        
+        Returns: dict with 'cell', 'date', 'month_year', 'months_forward'
+        or None if no dates found.
+        """
+        # Check if we have cached result
+        if self._cached_check_date is not None:
+            cached = self._cached_check_date
+            logging.info(f'Using CACHED date: {cached["date"]} {cached["month_year"]} '
+                        f'(+{cached["months_forward"]} months)')
+            
+            # Navigate to cached month
+            for _ in range(cached['months_forward']):
+                next_month_btn = self.config.browser.find_element(by=By.XPATH, value=x_next_month)
+                self.human.human_click(next_month_btn)
+                time.sleep(rand.uniform(0.1, 0.2))
+                self.wait_spinner()
+            
+            # Find the cell for cached date
+            try:
+                month_year_text = self.config.browser.find_element(by=By.XPATH, value=x_month_year).text
+                enabled_cells = self.config.browser.find_elements(by=By.XPATH, value=x_enabled_cells)
+                
+                year, month = self.parse_month_year(month_year_text)
+                if year and month:
+                    for cell in enabled_cells:
+                        try:
+                            date_num = int(cell.text)
+                            if date_num == cached['date'] and not self.is_weekend_date(date_num, year, month):
+                                return {
+                                    'cell': cell,
+                                    'date': date_num,
+                                    'month_year': month_year_text,
+                                    'months_forward': cached['months_forward']
+                                }
+                        except:
+                            continue
+            except Exception as e:
+                logging.warning(f'Error using cached date, will search again: {e}')
+        
+        # Search for furthest date
+        max_months = 3  # Max 3 months forward (safety limit)
+        
+        for month_offset in range(max_months):
+            try:
+                month_year_text = self.config.browser.find_element(by=By.XPATH, value=x_month_year).text
+                enabled_cells = self.config.browser.find_elements(by=By.XPATH, value=x_enabled_cells)
+                
+                logging.info(f'[Month +{month_offset}] {month_year_text}: {len(enabled_cells)} enabled cells')
+                
+                if len(enabled_cells) == 0:
+                    # No dates in this month
+                    if month_offset > 0:
+                        # Go back to previous month
+                        logging.info('No dates in this month, returning to previous month')
+                        prev_month_btn = self.config.browser.find_element(by=By.XPATH, value=x_prev_month)
+                        self.human.human_click(prev_month_btn)
+                        time.sleep(rand.uniform(0.1, 0.2))
+                        self.wait_spinner()
+                        
+                        # Get last available date from previous month
+                        month_year_text = self.config.browser.find_element(by=By.XPATH, value=x_month_year).text
+                        enabled_cells = self.config.browser.find_elements(by=By.XPATH, value=x_enabled_cells)
+                        year, month = self.parse_month_year(month_year_text)
+                        
+                        if year and month:
+                            valid_cells = [c for c in enabled_cells 
+                                         if not self.is_weekend_date(int(c.text), year, month)]
+                            if valid_cells:
+                                last_cell = valid_cells[-1]
+                                result = {
+                                    'cell': last_cell,
+                                    'date': int(last_cell.text),
+                                    'month_year': month_year_text,
+                                    'months_forward': month_offset - 1
+                                }
+                                self._cache_date_info(result)
+                                return result
+                    return None
+                
+                # Parse month/year
+                year, month = self.parse_month_year(month_year_text)
+                if not year or not month:
+                    logging.warning(f'Could not parse month/year: {month_year_text}')
+                    return None
+                
+                # Filter weekends
+                valid_cells = []
+                for cell in enabled_cells:
+                    try:
+                        date_num = int(cell.text)
+                        if not self.is_weekend_date(date_num, year, month):
+                            valid_cells.append(cell)
+                        else:
+                            logging.debug(f'Skipping weekend: {date_num} {month_year_text}')
+                    except:
+                        continue
+                
+                if len(valid_cells) == 0:
+                    logging.warning(f'No non-weekend dates in {month_year_text}')
+                    if month_offset > 0:
+                        # Go back
+                        prev_month_btn = self.config.browser.find_element(by=By.XPATH, value=x_prev_month)
+                        self.human.human_click(prev_month_btn)
+                        time.sleep(rand.uniform(0.1, 0.2))
+                        self.wait_spinner()
+                    return None
+                
+                # Get last available date
+                last_available_date = int(valid_cells[-1].text)
+                last_working_day = self.get_last_working_day_of_month(year, month)
+                
+                logging.info(f'[Month +{month_offset}] {month_year_text}: '
+                           f'last_available={last_available_date}, last_working_day={last_working_day}')
+                
+                if last_available_date == last_working_day:
+                    # Dates extend to end of month, check next month
+                    logging.info(f'Last available date {last_available_date} matches '
+                               f'last working day {last_working_day} → going to next month')
+                    
+                    next_month_btn = self.config.browser.find_element(by=By.XPATH, value=x_next_month)
+                    self.human.human_click(next_month_btn)
+                    time.sleep(rand.uniform(0.1, 0.2))
+                    self.wait_spinner()
+                    continue
+                else:
+                    # Found our date!
+                    logging.info(f'✅ Found furthest date: {last_available_date} {month_year_text} '
+                               f'(< last working day {last_working_day})')
+                    
+                    result = {
+                        'cell': valid_cells[-1],
+                        'date': last_available_date,
+                        'month_year': month_year_text,
+                        'months_forward': month_offset
+                    }
+                    
+                    # Cache this result
+                    self._cache_date_info(result)
+                    
+                    return result
+                    
+            except Exception as e:
+                logging.error(f'Error in month {month_offset}: {e}')
+                return None
+        
+        # Reached max months
+        logging.warning(f'Reached max months ({max_months}), using last available')
+        return None
+    
+    def _cache_date_info(self, date_info):
+        """Cache date info for reuse across all locations in session"""
+        self._cached_check_date = {
+            'date': date_info['date'],
+            'month_year': date_info['month_year'],
+            'months_forward': date_info['months_forward']
+        }
+        logging.info(f'📌 CACHED date for session: {date_info["date"]} {date_info["month_year"]} '
+                    f'(+{date_info["months_forward"]} months)')
+
+    def check_last_date_only(self, location, queue):
+        """
+        Check ONLY the furthest available date in calendar (~6 weeks forward).
+        Uses improved logic: keep going to next month while last_available == last_working_day.
+        Skip weekends (Sat/Sun).
+        Cache result for all locations in session.
+        """
+        # Calendar selectors
+        x_calendar = '//mat-calendar[contains(@class,"reservation-calander")]'
+        x_enabled_cells = '//mat-calendar[contains(@class,"reservation-calander")]/div/mat-month-view/table/tbody/tr/td[@role="gridcell" and not(contains(@class,"disabled"))]//div[contains(@class,"mat-calendar-body-cell-content")]'
+        x_month_year = '//button[contains(@class,"mat-calendar-period-button")]/span'
+        x_next_month = '//button[contains(@class,"mat-calendar-next-button")]'
+        x_prev_month = '//button[contains(@class,"mat-calendar-previous-button")]'
+        x_reservations_hours = '//div[@class="reservation__hours"]//div[@class="tiles tiles--hours"]//div[@class="row"]'
+        x_time_slots = '//div[@class="reservation__hours"]//div[@class="tiles tiles--hours"]//div[@class="row"]//*[contains(@class,"tile")]'
+
+        # Wait for calendar
+        logging.info('waiting for calendar to load...')
+        time.sleep(rand.uniform(0.3, 0.8))
+        
+        try:
+            WebDriverWait(self.config.browser, 5).until(
+                EC.presence_of_element_located((By.XPATH, x_calendar))
+            )
+            logging.info('Calendar loaded successfully')
+        except Exception as e:
+            logging.warning(f'Calendar did not load for "{location}" - "{queue}" - skipping')
+            return None
+        
+        # Find the furthest available date (passing through months)
+        date_info = self.find_furthest_available_date(x_month_year, x_enabled_cells, x_next_month, x_prev_month)
+        
+        if date_info is None:
+            logging.warning(f'No valid date found for "{location}" - "{queue}"')
+            return None
+        
+        # Click on the found date
+        logging.info(f'✅ Checking FURTHEST date: {date_info["date"]} {date_info["month_year"]}')
+        time.sleep(rand.uniform(0.1, 0.3))
+        
+        self.human.human_click(date_info['cell'])
+        self.wait_spinner()
+        
+        # IMMEDIATELY check for captcha after click!
+        captcha_appeared = self.detect_captcha()
+        if captcha_appeared:
+            logging.info('Captcha was solved, continuing...')
+        
+        # Check for time slots
+        slots_found = False
+        slots_container = self.config.browser.find_elements(by=By.XPATH, value=x_reservations_hours)
+        if len(slots_container) != 0:
+            time_slots = self.config.browser.find_elements(by=By.XPATH, value=x_time_slots)
+            if len(time_slots) > 0:
+                msg = f'🎯 SLOT FOUND! {date_info["date"]} {date_info["month_year"]}: {location} - {queue} ({len(time_slots)} slots)'
+                logging.info(msg)
+                self.config.messenger.send_message(msg)
+                slots_found = True
+            else:
+                logging.debug(f'Container found but no time slots for {date_info["date"]}')
+        
+        # Return to initial month if we went forward
+        if date_info['months_forward'] > 0:
+            logging.info(f'Returning to initial month (-{date_info["months_forward"]} months)...')
+            for _ in range(date_info['months_forward']):
+                prev_month_btn = self.config.browser.find_element(by=By.XPATH, value=x_prev_month)
+                self.human.human_click(prev_month_btn)
+                time.sleep(rand.uniform(0.1, 0.2))
+                self.wait_spinner()
+        
+        return slots_found
 
     def check_one_location(self, location_number):
         self.config.browser.get(self.case_page_url(self.config.case_id))

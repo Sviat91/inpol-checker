@@ -53,7 +53,7 @@ def check():
                 return
 
         # НЕ перемешиваем - проходим по порядку!
-        months_to_check = int(os.environ.get('MONTHS_TO_CHECK', '5'))
+        # Новый алгоритм: проверяем ТОЛЬКО ПОСЛЕДНЮЮ доступную дату
         
         for location in locations:
             logging.info(f'=== Checking location: {location} ===')
@@ -70,8 +70,8 @@ def check():
                     inpol.expand_locations()
                     continue
                 
-                # Проверяем даты для этой комбинации адрес+очередь
-                inpol.day_checker_full(location=location, queue=queue, months_to_check=months_to_check)
+                # Проверяем ТОЛЬКО последнюю доступную дату (игнорируя выходные)
+                slots_found = inpol.check_last_date_only(location=location, queue=queue)
                 
             except Exception as e:
                 logging.error(f'Error checking location "{location}": {e}')
