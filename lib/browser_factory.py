@@ -1,12 +1,21 @@
 import logging
 import os
 import tempfile
+import random
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.remote.remote_connection import LOGGER as webdriver_logger
 from urllib3.connectionpool import log as urllib_logger
+
+# Import undetected-chromedriver for anti-bot detection
+try:
+    import undetected_chromedriver as uc
+    UC_AVAILABLE = True
+except ImportError:
+    UC_AVAILABLE = False
+    logging.warning('undetected-chromedriver not installed - using standard selenium with enhanced anti-detection')
 
 
 class BrowserFactory:
@@ -43,7 +52,18 @@ class BrowserFactory:
         
         # Anti-detection: Remove WebDriver traces to avoid Akamai bot detection
         options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+        
+        # Randomize User-Agent for each session to avoid fingerprinting
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        ]
+        selected_ua = random.choice(user_agents)
+        options.add_argument(f'--user-agent={selected_ua}')
+        logging.debug(f'Using User-Agent: {selected_ua[:50]}...')
+        
         options.add_experimental_option('excludeSwitches', ['enable-automation'])
         options.add_experimental_option('useAutomationExtension', False)
         
@@ -69,11 +89,56 @@ class BrowserFactory:
         if driver_path:
             service = ChromeService(executable_path=driver_path, log_path=service_log_path)
 
-        # Create Chrome WebDriver with standard selenium
-        if service:
-            driver = webdriver.Chrome(service=service, options=options)
-        else:
-            driver = webdriver.Chrome(options=options)
+        # Create Chrome WebDriver - try undetected-chromedriver first
+        driver = None
+        
+        if UC_AVAILABLE:
+            try:
+                logging.info('Attempting to create undetected Chrome driver...')
+                
+                # undetected-chromedriver options
+                uc_options = uc.ChromeOptions()
+                
+                # Copy critical arguments only (avoid conflicts)
+                critical_args = [
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    f'--window-size={window_size}',
+                ]
+                
+                for arg in critical_args:
+                    uc_options.add_argument(arg)
+                
+                # Add user-data-dir
+                uc_options.add_argument(f'--user-data-dir={user_data_dir}')
+                
+                # Set binary if specified
+                if binary_path:
+                    uc_options.binary_location = binary_path
+                
+                # Create undetected driver (let it manage chromedriver itself)
+                driver = uc.Chrome(
+                    options=uc_options,
+                    version_main=None,
+                    use_subprocess=False,
+                    headless=headless_mode
+                )
+                
+                logging.info('✅ Undetected Chrome driver created successfully')
+                
+            except Exception as e:
+                logging.warning(f'undetected-chromedriver failed: {e}')
+                logging.info('Falling back to standard Selenium with enhanced anti-detection')
+                driver = None
+        
+        # Fallback to standard Selenium (or if uc not available)
+        if driver is None:
+            logging.info('Creating standard Chrome driver with enhanced anti-detection')
+            if service:
+                driver = webdriver.Chrome(service=service, options=options)
+            else:
+                driver = webdriver.Chrome(options=options)
         
         # Execute CDP commands to hide automation and bypass Akamai fingerprinting
         driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {

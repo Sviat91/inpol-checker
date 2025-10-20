@@ -59,16 +59,16 @@ x11vnc \
 x11vnc=$!
 
 # Set environment variables for Chrome
-export CHROMEDRIVER_PATH=${CHROMEDRIVER_PATH:-/usr/bin/chromedriver}
-export CHROME_BINARY=${CHROME_BINARY:-/usr/bin/chromium}
+# Note: CHROMEDRIVER_PATH not set - undetected-chromedriver manages driver automatically
+export CHROME_BINARY=${CHROME_BINARY:-/usr/bin/google-chrome}
 export HEADLESS=${HEADLESS:-false}
 
 echo "Environment configured:"
 echo "  DISPLAY=$DISPLAY"
-echo "  CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH"
 echo "  CHROME_BINARY=$CHROME_BINARY"
 echo "  HEADLESS=$HEADLESS"
 echo "  Window Manager: Fluxbox"
+echo "  Note: ChromeDriver managed by undetected-chromedriver"
 
 # Change to working directory
 cd /opt/src || exit 1

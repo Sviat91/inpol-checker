@@ -1,5 +1,7 @@
 # Direct dependencies only - let pip resolve compatible versions
 selenium>=4.21.0
+undetected-chromedriver>=3.5.4
+setuptools>=65.5.0  # Required for distutils (removed in Python 3.12) used by undetected-chromedriver
 requests>=2.32.0
 pytimeparse>=1.1.8
 pytz>=2024.1
